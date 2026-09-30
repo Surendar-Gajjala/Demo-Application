@@ -1,0 +1,16 @@
+.env
+
+# Build output / dependencies
+backend/target/
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+*.log

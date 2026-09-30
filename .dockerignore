@@ -1,0 +1,5 @@
+# Build context is the repo root; only send what the images need.
+*
+!backend/pom.xml
+!backend/src
+!db/migrations
