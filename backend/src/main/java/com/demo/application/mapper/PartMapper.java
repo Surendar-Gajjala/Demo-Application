@@ -2,6 +2,7 @@ package com.demo.application.mapper;
 
 import com.demo.application.dto.PartRequest;
 import com.demo.application.dto.PartResponse;
+import com.demo.application.model.Item;
 import com.demo.application.model.Part;
 
 public final class PartMapper {
@@ -10,6 +11,7 @@ public final class PartMapper {
     }
 
     public static PartResponse toResponse(Part part) {
+        Item item = part.getItem();
         return new PartResponse(
                 part.getId(),
                 part.getPartNumber(),
@@ -17,11 +19,14 @@ public final class PartMapper {
                 part.getDescription(),
                 part.getManufactureName(),
                 part.getLifeCyclePhase(),
+                item == null ? null : item.getId(),
+                item == null ? null : item.getItemNumber(),
+                item == null ? null : item.getItemName(),
                 part.getCreatedAt(),
                 part.getUpdatedAt());
     }
 
-    /** Copies every request field onto the entity (create and full update). */
+    /** Copies every request field onto the entity (create and full update); the service resolves itemId. */
     public static void apply(PartRequest request, Part part) {
         part.setPartNumber(request.partNumber().trim());
         part.setPartName(request.partName().trim());

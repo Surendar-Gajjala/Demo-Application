@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import type { ItemResponse } from '../api/types';
+import type { ItemResponse, PartResponse } from '../api/types';
 import { ItemDetailPage } from '../pages/ItemDetailPage';
 import { itemsApi } from '../api/items';
 
@@ -18,6 +19,25 @@ const item: ItemResponse = {
   updatedAt: '2026-09-29T11:09:07Z',
 };
 
+const part: PartResponse = {
+  id: 3,
+  partNumber: 'A-2041',
+  partName: 'Voltage Regulator',
+  description: null,
+  manufactureName: 'Linear Technology',
+  lifeCyclePhase: 'PRODUCTION',
+  itemId: 7,
+  itemNumber: 'PROD-001',
+  itemName: 'Product 001',
+  createdAt: '2026-09-29T11:09:07Z',
+  updatedAt: '2026-09-29T11:09:07Z',
+};
+
+function Location() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname + location.search}</output>;
+}
+
 function renderAt(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -26,6 +46,7 @@ function renderAt(path: string) {
         <Routes>
           <Route path="/items/:id" element={<ItemDetailPage />} />
         </Routes>
+        <Location />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -53,6 +74,44 @@ describe('ItemDetailPage', () => {
     expect(value('Item Status')).toHaveTextContent('Production');
     expect(value('Description')).toHaveTextContent('—');
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+  });
+
+  it('has Overview, BOM and Parts tabs; Parts lists the item parts and the tab is kept in ?tab=', async () => {
+    vi.spyOn(itemsApi, 'get').mockResolvedValue(item);
+    const parts = vi.spyOn(itemsApi, 'parts').mockResolvedValue({
+      content: [part],
+      page: 0,
+      size: 20,
+      totalElements: 1,
+      totalPages: 1,
+    });
+    renderAt('/items/7');
+
+    const overview = await screen.findByRole('tab', { name: 'Overview' }, { timeout: 5000 });
+    expect(overview).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'BOM' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Parts' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/items/7?tab=parts');
+    expect(await screen.findByRole('link', { name: 'A-2041' }, { timeout: 5000 })).toHaveAttribute(
+      'href',
+      '/parts/3',
+    );
+    expect(parts).toHaveBeenCalledWith(7, { search: '', page: 0, size: 20 });
+    expect(screen.queryByRole('heading', { name: 'General' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add Part' })).toBeInTheDocument();
+  });
+
+  it('opens the tab named in the URL', async () => {
+    vi.spyOn(itemsApi, 'get').mockResolvedValue(item);
+    vi.spyOn(itemsApi, 'parts').mockResolvedValue({ content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 });
+    renderAt('/items/7?tab=parts');
+
+    expect(await screen.findByRole('tab', { name: 'Parts' }, { timeout: 5000 })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(await screen.findByText('No parts yet', {}, { timeout: 5000 })).toBeInTheDocument();
   });
 
   it('shows the backend error for an unknown id', async () => {

@@ -37,8 +37,17 @@ Item
 
 This is a **self-referencing Item-to-Item relationship**.
 
+Items, Parts and Sites are also connected to each other:
+
+``` text
+Item → Item      (BOM, self-referencing, item_bom)
+Item → Part      (one-to-many, part.item_id)
+Part ↔ Site      (many-to-many, part_site)
+```
+
 Users can create, view, search, edit and delete Items, Parts and Sites,
-and browse a multi-level Item BOM hierarchy.
+browse a multi-level Item BOM hierarchy, and navigate the relationships
+in both directions (Item → Part → Site and Site → Part → Item).
 
 The application demonstrates how a product/supply-chain style
 application can manage master data and hierarchical BOM relationships.
@@ -73,7 +82,8 @@ Laptop
 ### 2.2 Part
 
 A **Part** represents a component or sourced/manufactured part.
-Parts are maintained independently from Items.
+A Part optionally belongs to **one Item** (its parent item) and can be
+used at **many Sites**.
 
   Property          Type     Description
   ----------------- -------- ------------------------
@@ -177,6 +187,36 @@ PROD-001
 
 ------------------------------------------------------------------------
 
+## 3a. Item → Part and Part ↔ Site
+
+-   **Item 1 : N Part** (`part.item_id`, optional). One Item has many
+    Parts; a Part belongs to at most one Item. Deleting an Item unlinks
+    its Parts (they are kept).
+-   **Part N : N Site** (`part_site`). One Part can be at many Sites and
+    one Site can have many Parts. The link is the same whichever side it
+    is created from; deleting a Part or Site removes its links.
+
+``` text
+PROD-001                A-2041                 Hyderabad Plant
+   |                       |                         |
+   +── A-2041              +── Hyderabad Plant       +── A-2041
+   +── A-2042              +── Bengaluru Plant       +── A-2042
+   +── A-2050              +── Austin Design Center  +── A-2045
+```
+
+Detail pages show the relationships as tabs:
+
+``` text
+Item Details   Overview | BOM | Parts (+ Add Part: attach an existing part)
+Part Details   Overview | Item | Sites (+ Add Site: link an existing site)
+Site Details   Overview | Parts (+ Add Part: link an existing part)
+```
+
+The full requirement is in
+[docs/requirements/2026-10-01-part-item-site-relationships.md](docs/requirements/2026-10-01-part-item-site-relationships.md).
+
+------------------------------------------------------------------------
+
 ## 4. Overall Business Model
 
 ``` text
@@ -184,8 +224,8 @@ PROD-001
                               |
               +---------------+---------------+
               |               |               |
-             Item            Part            Site
-              |
+             Item ──1:N──> Part <──N:N──> Site
+              |                  (part_site)
               |
           item_bom
               |
@@ -242,6 +282,8 @@ PROD-001
         |                 |                  |
        item            item_bom              part
         |                 |                  |
+        |                 |               part_site
+        |                 |                  |
         |                 |                  site
         +-----------------+------------------+
 ```
@@ -291,13 +333,16 @@ Per-container details are in the matching layer file.
 ## 8. Final Scope
 
 -   **Master Data:** Item, Part, Site
--   **Relationship:** Item → Item (`item_bom`)
+-   **Relationships:** Item → Item (`item_bom`), Item → Part (1:N,
+    `part.item_id`), Part ↔ Site (N:N, `part_site`)
 -   **Item Hierarchy:** Product → Assembly → Child Item → Component
 -   **Backend:** Java 19, Spring Boot, Controller, Service, Repository,
     Models, DTOs, Graph/BOM Service
--   **Database:** PostgreSQL — `item`, `item_bom`, `part`, `site`
+-   **Database:** PostgreSQL — `item`, `item_bom`, `part`, `site`,
+    `part_site`
 -   **Frontend:** ReactJS — Dashboard, ItemHierarchy, Items, Parts,
-    Sites, Search, Filters, Tables, Forms, Pagination, Expand/Collapse
+    Sites, detail pages with relationship tabs, Search, Tables, Forms,
+    Pagination, Expand/Collapse
 -   **Deployment:** Docker, Docker Compose — Frontend, Backend,
     PostgreSQL
 

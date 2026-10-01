@@ -49,6 +49,8 @@ export interface PartRequest {
   description?: string | null;
   manufactureName?: string | null;
   lifeCyclePhase: LifeCyclePhase;
+  /** Optional parent item; null = not assigned. */
+  itemId: number | null;
 }
 
 export interface PartResponse {
@@ -58,6 +60,10 @@ export interface PartResponse {
   description: string | null;
   manufactureName: string | null;
   lifeCyclePhase: LifeCyclePhase;
+  /** Parent item (Item 1 : N Part); all null when not assigned. */
+  itemId: number | null;
+  itemNumber: string | null;
+  itemName: string | null;
   createdAt: string;
   updatedAt: string;
 }

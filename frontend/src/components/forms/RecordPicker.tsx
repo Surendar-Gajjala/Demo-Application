@@ -5,13 +5,14 @@ import { useId, useState, type KeyboardEvent } from 'react';
 import { useDebounce } from '../../hooks/useDebounce';
 import { TextInput } from './FormField';
 
+/** One choice: an identifier (item / part number, site name) and a secondary name. */
 export interface PickerOption {
   id: number;
-  itemNumber: string;
-  itemName: string;
+  code: string;
+  name?: string | null;
 }
 
-const label = (item: PickerOption) => `${item.itemNumber} · ${item.itemName}`;
+const label = (o: PickerOption) => (o.name ? `${o.code} · ${o.name}` : o.code);
 
 interface Props {
   /** React Query key prefix; the search text is appended. */
@@ -24,13 +25,15 @@ interface Props {
   disabled?: boolean;
   placeholder?: string;
   emptyText?: string;
+  /** Pre-selected option (e.g. when editing). */
+  initial?: PickerOption | null;
 }
 
 /**
- * Searchable item dropdown. Typing searches item number / name on the server
- * (debounced).
+ * Searchable dropdown of records (items, parts, sites). Typing searches on
+ * the server (debounced).
  */
-export function ItemPicker({
+export function RecordPicker({
   queryKey,
   load,
   onSelect,
@@ -39,10 +42,11 @@ export function ItemPicker({
   disabled,
   placeholder = 'Search item number or name...',
   emptyText = 'No items can be added',
+  initial = null,
 }: Props) {
   const listId = useId();
-  const [text, setText] = useState('');
-  const [selected, setSelected] = useState<PickerOption | null>(null);
+  const [text, setText] = useState(initial ? label(initial) : '');
+  const [selected, setSelected] = useState<PickerOption | null>(initial);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
 
@@ -141,8 +145,8 @@ export function ItemPicker({
                 i === active && 'bg-interactive-bg-secondary-hover',
               )}
             >
-              <span className="text-link">{item.itemNumber}</span>
-              <span className="truncate text-ink">{item.itemName}</span>
+              <span className="shrink-0 text-link">{item.code}</span>
+              {item.name && <span className="truncate text-ink">{item.name}</span>}
             </li>
           ))}
         </ul>

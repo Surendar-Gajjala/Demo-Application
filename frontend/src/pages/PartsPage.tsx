@@ -2,6 +2,7 @@ import { partsApi } from '../api/parts';
 import type { PartRequest, PartResponse } from '../api/types';
 import { PartForm } from '../components/forms/PartForm';
 import { MasterDataPage, type MasterDataConfig } from '../components/MasterDataPage';
+import { itemColumn } from '../components/relatedColumns';
 import { LinkCell, TextCell } from '../components/table/cells';
 import { Badge } from '../components/ui/Badge';
 
@@ -36,6 +37,7 @@ const config: MasterDataConfig<PartResponse, PartRequest> = {
       sortField: 'lifeCyclePhase',
       render: (p) => <Badge value={p.lifeCyclePhase} />,
     },
+    itemColumn(),
   ],
 };
 

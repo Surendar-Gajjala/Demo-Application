@@ -10,5 +10,7 @@ public record PartRequest(
         @NotBlank @Size(max = 255) String partName,
         String description,
         @Size(max = 255) String manufactureName,
-        @NotNull LifeCyclePhase lifeCyclePhase) {
+        @NotNull LifeCyclePhase lifeCyclePhase,
+        /** Optional parent item; null = not assigned. */
+        Long itemId) {
 }

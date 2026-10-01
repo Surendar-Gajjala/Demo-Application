@@ -6,12 +6,13 @@ import com.demo.application.dto.PartResponse;
 import com.demo.application.exception.ConflictException;
 import com.demo.application.exception.NotFoundException;
 import com.demo.application.mapper.PartMapper;
+import com.demo.application.model.Item;
 import com.demo.application.model.LifeCyclePhase;
 import com.demo.application.model.Part;
+import com.demo.application.repository.ItemRepository;
 import com.demo.application.repository.PartRepository;
-import com.demo.application.repository.SearchSpecifications;
+import com.demo.application.repository.PartSpecifications;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,17 +20,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class PartService {
 
     private final PartRepository partRepository;
+    private final ItemRepository itemRepository;
 
-    public PartService(PartRepository partRepository) {
+    public PartService(PartRepository partRepository, ItemRepository itemRepository) {
         this.partRepository = partRepository;
+        this.itemRepository = itemRepository;
     }
 
     @Transactional(readOnly = true)
     public PageResponse<PartResponse> search(String search, LifeCyclePhase lifeCyclePhase, Pageable pageable) {
-        Specification<Part> spec = Specification
-                .where(SearchSpecifications.<Part>containsIgnoreCase(search, "partNumber", "partName"))
-                .and(SearchSpecifications.equalsIfPresent("lifeCyclePhase", lifeCyclePhase));
-        return PageResponse.of(partRepository.findAll(spec, pageable), PartMapper::toResponse);
+        return PageResponse.of(partRepository.findAll(PartSpecifications.matching(search, lifeCyclePhase), pageable),
+                PartMapper::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -44,6 +45,7 @@ public class PartService {
         }
         Part part = new Part();
         PartMapper.apply(request, part);
+        part.setItem(findItemOrNull(request.itemId()));
         return PartMapper.toResponse(partRepository.saveAndFlush(part));
     }
 
@@ -54,6 +56,7 @@ public class PartService {
             throw duplicate(request.partNumber());
         }
         PartMapper.apply(request, part);
+        part.setItem(findItemOrNull(request.itemId()));
         return PartMapper.toResponse(partRepository.saveAndFlush(part));
     }
 
@@ -64,6 +67,14 @@ public class PartService {
 
     private Part find(Long id) {
         return partRepository.findById(id).orElseThrow(() -> NotFoundException.of("Part", id));
+    }
+
+    /** Optional parent item; an unknown id is a 404. */
+    private Item findItemOrNull(Long itemId) {
+        if (itemId == null) {
+            return null;
+        }
+        return itemRepository.findById(itemId).orElseThrow(() -> NotFoundException.of("Item", itemId));
     }
 
     private static ConflictException duplicate(String partNumber) {

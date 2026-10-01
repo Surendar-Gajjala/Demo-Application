@@ -11,6 +11,10 @@ public record PartResponse(
         String description,
         String manufactureName,
         LifeCyclePhase lifeCyclePhase,
+        /** Parent item, all null when the part is not assigned. */
+        Long itemId,
+        String itemNumber,
+        String itemName,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt) {
 }

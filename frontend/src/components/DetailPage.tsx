@@ -1,14 +1,23 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import clsx from 'clsx';
 import { Pencil } from 'lucide-react';
 import { useState, type ComponentType, type ReactNode } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { Header } from './layout/Header';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
+import { useToast } from './ui/Toast';
 import { ErrorState, LoadingState } from './ui/States';
 import type { EntityFormProps } from './forms/types';
 
 export interface DetailField<T> {
+  label: string;
+  render: (row: T) => ReactNode;
+}
+
+/** Extra tab after "Overview", e.g. Parts. Its key is kept in ?tab= so links and Back work. */
+export interface DetailTab<T> {
+  key: string;
   label: string;
   render: (row: T) => ReactNode;
 }
@@ -23,14 +32,35 @@ export interface DetailConfig<T extends { id: number }, R> {
   Form: ComponentType<EntityFormProps<T, R>>;
   title: (row: T) => string;
   fields: DetailField<T>[];
+  tabs?: DetailTab<T>[];
 }
 
-/** Details screen: "← <list>" header titled with the record, and a General info card. */
+const OVERVIEW = 'overview';
+
+/**
+ * Details screen: "← <list>" header titled with the record, then tabs:
+ * Overview (General info card) plus any relationship tabs from the config.
+ */
 export function DetailPage<T extends { id: number }, R>({ config }: { config: DetailConfig<T, R> }) {
   const { id: idParam } = useParams();
   const id = Number(idParam);
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [editing, setEditing] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabs = config.tabs ?? [];
+  const requestedTab = searchParams.get('tab');
+  const activeTab = tabs.find((t) => t.key === requestedTab) ? requestedTab! : OVERVIEW;
+  const selectTab = (key: string) =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (key === OVERVIEW) next.delete('tab');
+        else next.set('tab', key);
+        return next;
+      },
+      { replace: true },
+    );
 
   const query = useQuery({
     queryKey: [config.queryKey, 'detail', id],
@@ -52,6 +82,7 @@ export function DetailPage<T extends { id: number }, R>({ config }: { config: De
 
   const submit = async (request: R) => {
     await config.update(id, request);
+    toast.success(`${config.entityName} updated successfully`);
     setEditing(false);
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: [config.queryKey] }),
@@ -75,10 +106,33 @@ export function DetailPage<T extends { id: number }, R>({ config }: { config: De
         }
       />
 
+      {tabs.length > 0 && row && (
+        <div role="tablist" aria-label={`${config.entityName} sections`} className="flex gap-1 border-b border-line bg-white px-8">
+          {[{ key: OVERVIEW, label: 'Overview' }, ...tabs].map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === t.key}
+              onClick={() => selectTab(t.key)}
+              className={clsx(
+                '-mb-px border-b-2 px-3 py-3 text-[15px]',
+                activeTab === t.key
+                  ? 'border-primary font-medium text-ink'
+                  : 'border-transparent text-muted hover:text-ink',
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 overflow-auto bg-app px-8 py-6">
         {query.isPending && <LoadingState />}
         {query.isError && <ErrorState message={query.error.message} onRetry={() => query.refetch()} />}
-        {row && (
+        {row && activeTab !== OVERVIEW && <div role="tabpanel">{tabs.find((t) => t.key === activeTab)!.render(row)}</div>}
+        {row && activeTab === OVERVIEW && (
           <section className="rounded-lg border border-line bg-white" aria-labelledby="general-heading">
             <h2 id="general-heading" className="border-b border-line px-5 py-4 text-[15px] text-ink">
               General

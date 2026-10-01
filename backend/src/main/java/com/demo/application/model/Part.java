@@ -4,6 +4,9 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 @Entity
@@ -25,6 +28,11 @@ public class Part extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "life_cycle_phase", nullable = false, length = 20)
     private LifeCyclePhase lifeCyclePhase;
+
+    /** Optional parent item (Item 1 : N Part). Deleting the item sets this to null in the DB. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "item_id")
+    private Item item;
 
     public String getPartNumber() {
         return partNumber;
@@ -64,5 +72,13 @@ public class Part extends BaseEntity {
 
     public void setLifeCyclePhase(LifeCyclePhase lifeCyclePhase) {
         this.lifeCyclePhase = lifeCyclePhase;
+    }
+
+    public Item getItem() {
+        return item;
+    }
+
+    public void setItem(Item item) {
+        this.item = item;
     }
 }

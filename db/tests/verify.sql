@@ -175,6 +175,57 @@ BEGIN
     RAISE NOTICE 'check 7 ok: delete cascades to item_bom';
 END $$;
 
+-- 8. Item -> Part: seed links exist, and deleting an item (ASSEMBLY-001,
+--    deleted in check 7) unlinked its parts instead of deleting them.
+DO $$
+DECLARE
+    prod_parts INT;
+    orphaned   INT;
+BEGIN
+    SELECT count(*) INTO prod_parts
+    FROM part p JOIN item i ON i.id = p.item_id
+    WHERE i.item_number = 'PROD-001';
+    IF prod_parts <> 4 THEN
+        RAISE EXCEPTION 'CHECK 8 FAILED: PROD-001 has % parts, expected 4', prod_parts;
+    END IF;
+
+    SELECT count(*) INTO orphaned
+    FROM part WHERE part_number IN ('A-2045', 'A-2048') AND item_id IS NULL;
+    IF orphaned <> 2 THEN
+        RAISE EXCEPTION 'CHECK 8 FAILED: parts of deleted item not unlinked (% of 2)', orphaned;
+    END IF;
+    RAISE NOTICE 'check 8 ok: item -> part, delete sets item_id null';
+END $$;
+
+-- 9. Part <-> Site: duplicate link rejected.
+DO $$
+BEGIN
+    INSERT INTO part_site (part_id, site_id)
+    SELECT p.id, s.id FROM part p, site s
+    WHERE p.part_number = 'A-2041' AND s.site_name = 'Hyderabad Plant';
+    RAISE EXCEPTION 'CHECK 9 FAILED: duplicate part_site accepted';
+EXCEPTION WHEN unique_violation THEN
+    RAISE NOTICE 'check 9 ok: duplicate part_site rejected';
+END $$;
+
+-- 10. Deleting a part or a site removes its part_site links.
+DO $$
+DECLARE
+    part_links INT;
+    site_links INT;
+    a2041 BIGINT := (SELECT id FROM part WHERE part_number = 'A-2041');
+    penang BIGINT := (SELECT id FROM site WHERE site_name = 'Penang Plant');
+BEGIN
+    DELETE FROM part WHERE id = a2041;
+    DELETE FROM site WHERE id = penang;
+    SELECT count(*) INTO part_links FROM part_site WHERE part_id = a2041;
+    SELECT count(*) INTO site_links FROM part_site WHERE site_id = penang;
+    IF part_links <> 0 OR site_links <> 0 THEN
+        RAISE EXCEPTION 'CHECK 10 FAILED: % part links, % site links left', part_links, site_links;
+    END IF;
+    RAISE NOTICE 'check 10 ok: part / site delete cascades to part_site';
+END $$;
+
 \echo ALL CHECKS PASSED
 
 ROLLBACK;

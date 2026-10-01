@@ -92,6 +92,12 @@ Entities map 1:1 to the tables in [db/CLAUDE.md](../db/CLAUDE.md).
     `fromNode` (parent) and `toNode` (child).
 -   `Item` does **not** map collections of BOM edges. BOM navigation always
     goes through `BomService` / `ItemBomRepository`.
+-   `Part.item` is an optional `@ManyToOne(fetch = LAZY)` (`part.item_id`).
+    `PartRepository.findAll(spec, pageable)` fetches it with an
+    `@EntityGraph`, because every `PartResponse` includes the item.
+-   `PartSite` maps `part_site` (`@ManyToOne` part and site). It does not
+    extend `BaseEntity` (no `updated_at`). Neither `Part`, `Site` nor
+    `Item` maps collections of links; go through the services.
 
   Entity     Table       Key fields
   ---------- ----------- -----------------------------------------------------------
@@ -99,6 +105,7 @@ Entities map 1:1 to the tables in [db/CLAUDE.md](../db/CLAUDE.md).
   ItemBom    item_bom    fromNode, toNode, quantity (BigDecimal), bomDepth, sequence
   Part       part        partNumber (unique), partName, description, manufactureName, lifeCyclePhase
   Site       site        siteName, siteType, workcenter, address
+  PartSite   part_site   part, site
 
 ------------------------------------------------------------------------
 
@@ -114,7 +121,7 @@ Base path `/api`. JSON only. IDs are numeric (`Long`).
   GET      `/api/items/{id}`     Get one Item                               200
   POST     `/api/items`          Create Item                                201 + `Location`
   PUT      `/api/items/{id}`     Replace Item fields                        200
-  DELETE   `/api/items/{id}`     Delete Item (its BOM edges cascade)        204
+  DELETE   `/api/items/{id}`     Delete Item (BOM edges cascade, parts unlinked) 204
 
 `GET /api/items` query params: `search`, `type`, `lifeCyclePhase`, `page`,
 `size`, `sort`.
@@ -122,12 +129,12 @@ Base path `/api`. JSON only. IDs are numeric (`Long`).
 ### 5.2 Parts `/api/parts`
 
 Same five operations as Items. Query params: `search`, `lifeCyclePhase`,
-`page`, `size`, `sort`.
+`page`, `size`, `sort`. `DELETE` also removes the part's site links.
 
 ### 5.3 Sites `/api/sites`
 
 Same five operations as Items. Query params: `search`, `siteType`, `page`,
-`size`, `sort`.
+`size`, `sort`. `DELETE` also removes the site's part links.
 
 ### 5.4 BOM `/api/items/{id}/bom`
 
@@ -153,7 +160,42 @@ Hierarchy screen top level:
 For `PUT`/`DELETE`, the edge `bomId` must have `from_node_id = {id}`,
 otherwise 404.
 
-### 5.5 Dashboard `/api/dashboard`
+### 5.5 Item → Parts `/api/items/{itemId}/parts` (Item 1 : N Part)
+
+`ItemPartController` → `ItemPartService`. All lists take `search`
+(part number or name), `page`, `size`, `sort` and return
+`PageResponse<PartResponse>`.
+
+  Method   Path                                       Purpose
+  -------- ------------------------------------------ ---------------------------------------------------------------
+  GET      `/api/items/{itemId}/parts`                Parts whose `item_id` is the item
+  GET      `/api/items/{itemId}/parts/candidates`     Parts with no item (the "Add Part" dropdown)
+  POST     `/api/items/{itemId}/parts`                Attach an existing part: body `{"partId": n}` → 201 `PartResponse`
+  DELETE   `/api/items/{itemId}/parts/{partId}`       Unlink (sets `item_id` null; the part stays) → 204
+
+Errors: unknown item or part 404; part already on an item (this one or
+another) 409 naming the owner; DELETE of a part not on the item 404.
+
+### 5.6 Part ↔ Site `/api/parts/{partId}/sites`, `/api/sites/{siteId}/parts`
+
+`PartSiteController` → `PartSiteService`. Both sides create and delete
+the same `part_site` row. Lists take `search`, `page`, `size`, `sort`.
+
+  Method   Path                                       Purpose
+  -------- ------------------------------------------ ------------------------------------------
+  GET      `/api/parts/{partId}/sites`                Sites linked to the part
+  GET      `/api/parts/{partId}/sites/candidates`     Sites not linked yet
+  POST     `/api/parts/{partId}/sites/{siteId}`       Link → 201 (no body)
+  DELETE   `/api/parts/{partId}/sites/{siteId}`       Unlink → 204
+  GET      `/api/sites/{siteId}/parts`                Parts linked to the site
+  GET      `/api/sites/{siteId}/parts/candidates`     Parts not linked yet
+  POST     `/api/sites/{siteId}/parts/{partId}`       Link → 201 (no body)
+  DELETE   `/api/sites/{siteId}/parts/{partId}`       Unlink → 204
+
+Errors: unknown part or site 404; duplicate link 409; unlinking a
+missing link 404.
+
+### 5.7 Dashboard `/api/dashboard`
 
   Method   Path                        Purpose
   -------- --------------------------- ---------------------------------------------
@@ -180,6 +222,9 @@ PartRequest   partNumber      @NotBlank @Size(max=50)
               description     optional
               manufactureName @Size(max=255)
               lifeCyclePhase  @NotNull LifeCyclePhase
+              itemId          optional parent Item (null clears it; unknown → 404)
+
+LinkPartRequest   partId    @NotNull   (POST /api/items/{itemId}/parts)
 
 SiteRequest   siteName        @NotBlank @Size(max=255)
               siteType        @Size(max=100)
@@ -200,7 +245,8 @@ BomUpdateRequest  quantity  @NotNull @Positive
 ItemResponse   id, itemNumber, itemName, description, type,
                lifeCyclePhase, productFamily, createdAt, updatedAt
 PartResponse   id, partNumber, partName, description, manufactureName,
-               lifeCyclePhase, createdAt, updatedAt
+               lifeCyclePhase, itemId, itemNumber, itemName (null when
+               unassigned), createdAt, updatedAt
 SiteResponse   id, siteName, siteType, workcenter, address,
                createdAt, updatedAt
 
@@ -408,10 +454,14 @@ React Tree Table
                                               add/update/remove link, self 400, duplicate 409,
                                               cycle 409, DB trigger
   `DashboardApiIT`              Integration   counts and recent items
+  `ItemPartApiIT`               Integration   item parts, candidates (unassigned), attach 201 / 409,
+                                              detach 204 / 404, item delete unlinks parts
+  `PartSiteApiIT`               Integration   link from either side, duplicate 409, unlink,
+                                              candidates, part / site delete removes links
 
 -   `*Test` run with Surefire (`mvn test`), `*IT` with Failsafe (`mvn verify`).
 -   Integration tests extend `AbstractPostgresIT`: `@SpringBootTest` + MockMvc
-    + one shared Testcontainers `postgres:16-alpine` with V1 + V2 applied.
+    + one shared Testcontainers `postgres:16-alpine` with all migrations applied.
     Tests create their own rows (random numbers) and never modify seed rows.
 
 -   Never use H2: recursive CTEs, trigram indexes and the cycle trigger are

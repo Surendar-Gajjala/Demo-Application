@@ -11,6 +11,7 @@ import { SearchBar } from '../components/table/SearchBar';
 import { TreeTable, type TreeTableHandle } from '../components/table/TreeTable';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
+import { useToast } from '../components/ui/Toast';
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States';
 import { useTableParams } from '../hooks/useTableParams';
 
@@ -20,6 +21,7 @@ const ADD_BUTTON =
 export function ItemHierarchyPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const tree = useRef<TreeTableHandle>(null);
   const [expandingAll, setExpandingAll] = useState(false);
   const { params, setParams } = useTableParams();
@@ -49,6 +51,7 @@ export function ItemHierarchyPage() {
   /** Saves parent -> child, then refreshes that row (keeping the tree expanded) and dependent data. */
   const addBomItem = async (parentId: number, request: BomLinkRequest) => {
     await bomApi.addChild(parentId, request);
+    toast.success('BOM item added successfully');
     queryClient.removeQueries({ queryKey: ['bom', 'children', parentId] });
     queryClient.removeQueries({ queryKey: ['bom', 'explode'] });
     queryClient.removeQueries({ queryKey: ['bom', 'candidates'] });
@@ -71,7 +74,7 @@ export function ItemHierarchyPage() {
     <div className="flex h-full flex-col">
       <Header
         title="Item Hierarchy"
-        subtitle="Browse products and expand their assemblies and child items."
+        subtitle="Products and expand their assemblies and child items."
         backTo="/dashboard"
         backLabel="Back to Home"
       />

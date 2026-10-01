@@ -17,7 +17,7 @@ The frontend talks to the Spring Boot backend over REST
 ## 2. Side Panel
 
 ``` text
-Home
+Side nav
 |
 +-- Dashboards
 +-- ItemHierarchy
@@ -27,6 +27,9 @@ Home
 ```
 
 Each menu item opens its corresponding application screen.
+
+The top of the panel shows the app icon (`public/favicon.svg`, also the
+browser-tab icon) and the name **Demo-Application**.
 
 ------------------------------------------------------------------------
 
@@ -90,11 +93,14 @@ Part Name
 Description
 Manufacturer
 Lifecycle Phase
+Item
 Actions
 ```
 
 -   Search works against `partNumber` and `partName`.
--   **Add Part** opens a new Part form.
+-   **Add Part** opens a new Part form. The form has an optional **Item**
+    dropdown (parent item); clearing it unassigns the part.
+-   The **Item** column links the part's parent item (dash when none).
 
 ------------------------------------------------------------------------
 
@@ -118,6 +124,47 @@ Actions
 
 -   Search works against `siteName`.
 -   **Add Site** opens a new Site form.
+
+------------------------------------------------------------------------
+
+## 6a. Detail Pages and Relationship Tabs
+
+Clicking an identifier opens the record's details page
+(`components/DetailPage.tsx`): a "← <number>" header with **Edit**, then
+tabs. The active tab is kept in `?tab=` (Overview has no param), so links
+and Back work.
+
+``` text
+Item Details   [Overview] [BOM] [Parts]
+Part Details   [Overview] [Item] [Sites]
+Site Details   [Overview] [Parts]
+```
+
+-   **Overview**: the General card (all fields). Part Overview also shows
+    the parent **Item** as a link.
+-   **Item → BOM**: read-only multi-level tree of the item's children
+    (the Item Hierarchy `TreeTable`, Expand all / Collapse all). BOM items
+    are added from the Item Hierarchy.
+-   **Item → Parts**, **Part → Sites**, **Site → Parts**: a
+    `components/RelatedList.tsx` card:
+    -   Search, a table (identifier links to the linked record's details),
+        pagination. Columns come from `components/relatedColumns.tsx`;
+        Site → Parts adds an **Item** column.
+    -   **Add Part / Add Site** opens a modal with a searchable dropdown of
+        **existing** records (`RecordPicker`, fed by the `.../candidates`
+        endpoint) and creates a link, never a new record. Item → Parts
+        offers only parts that have no item yet.
+    -   A hover **Remove** (unlink icon) asks for confirmation and removes
+        only the link ("The part itself is not deleted.").
+    -   Success toasts: "Part A-2041 added to PROD-001", "Site Pune Test
+        Center removed from A-2041", ...
+-   **Part → Item**: card with the parent item (link, name, type, status),
+    or "Not assigned to an item".
+
+Navigation works both ways: Item → Part → Site and Site → Part → Item.
+Relationship queries live under the existing roots
+(`['parts','byItem',id]`, `['sites','byPart',id]`, `['parts','bySite',id]`),
+so any add / edit / delete refreshes them.
 
 ------------------------------------------------------------------------
 
@@ -207,6 +254,11 @@ Each master-data page has an Add button (Add Item, Add Part, Add Site).
 Clicking it opens a form that collects the entity properties and submits
 them to the backend.
 
+After a successful add, edit or delete (Items, Parts, Sites, detail-page
+edits, and Add BOM Item), a green success message ("Item added
+successfully", "Part updated successfully", ...) appears at the bottom right of
+the screen for 3 seconds (`components/ui/Toast.tsx`, `useToast().success`).
+
 ------------------------------------------------------------------------
 
 ## 9. Reusable Components
@@ -227,6 +279,9 @@ LoadingState
 EmptyState
 ErrorState
 ConfirmationDialog
+RecordPicker      searchable dropdown of items / parts / sites
+RelatedList       relationship tab (search, table, Add via picker, Remove)
+DetailPage        details header + Overview and relationship tabs
 ```
 
 Items, Parts and Sites share common table and form behavior through

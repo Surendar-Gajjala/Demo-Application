@@ -6,7 +6,7 @@ import { bomApi } from '../../api/bom';
 import type { BomLinkRequest, BomNode } from '../../api/types';
 import { Field, TextInput } from './FormField';
 import { FormActions } from './FormActions';
-import { ItemPicker } from './ItemPicker';
+import { RecordPicker, type PickerOption } from './RecordPicker';
 import { applyServerError } from './serverErrors';
 
 // Mirrors BomLinkRequest validation in the backend (quantity NUMERIC(12,3) > 0).
@@ -30,10 +30,15 @@ interface Props {
   onCancel: () => void;
 }
 
-const loadRoots = (search: string) =>
+const loadRoots = (search: string): Promise<PickerOption[]> =>
   bomApi
     .roots({ search, size: 20 })
-    .then((page) => page.content.map((n) => ({ id: n.itemId, itemNumber: n.itemNumber, itemName: n.itemName })));
+    .then((page) => page.content.map((n) => ({ id: n.itemId, code: n.itemNumber, name: n.itemName })));
+
+const loadCandidates = (parentId: number, search: string): Promise<PickerOption[]> =>
+  bomApi
+    .candidates(parentId, { search, size: 20 })
+    .then((page) => page.content.map((i) => ({ id: i.id, code: i.itemNumber, name: i.itemName })));
 
 /** "Add BOM Item": pick a child item and quantity to add under a parent. */
 export function BomItemForm({ parent, onSubmit, onCancel }: Props) {
@@ -74,7 +79,7 @@ export function BomItemForm({ parent, onSubmit, onCancel }: Props) {
             control={control}
             name="parentId"
             render={({ field, fieldState }) => (
-              <ItemPicker
+              <RecordPicker
                 queryKey={['bom', 'roots', 'picker']}
                 load={loadRoots}
                 autoFocus
@@ -95,11 +100,11 @@ export function BomItemForm({ parent, onSubmit, onCancel }: Props) {
           control={control}
           name="childId"
           render={({ field, fieldState }) => (
-            <ItemPicker
+            <RecordPicker
               // Reset the choice when the parent changes.
               key={parentId ?? 'none'}
               queryKey={['bom', 'candidates', parentId]}
-              load={(search) => bomApi.candidates(parentId, { search, size: 20 }).then((page) => page.content)}
+              load={(search) => loadCandidates(parentId, search)}
               disabled={!parentId}
               autoFocus={!!parent}
               placeholder={parentId ? undefined : 'Select a parent item first'}

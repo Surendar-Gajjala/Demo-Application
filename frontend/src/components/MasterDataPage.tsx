@@ -10,6 +10,7 @@ import { SearchBar } from './table/SearchBar';
 import { Button, IconButton } from './ui/Button';
 import { ConfirmationDialog } from './ui/ConfirmationDialog';
 import { Modal } from './ui/Modal';
+import { useToast } from './ui/Toast';
 import { EmptyState, ErrorState, LoadingState } from './ui/States';
 import type { EntityFormProps } from './forms/types';
 
@@ -32,6 +33,13 @@ export interface MasterDataConfig<T extends { id: number }, R> {
   label: (row: T) => string;
 }
 
+/** What else a delete changes, per entity (see the ON DELETE rules in db/migrations). */
+const DELETE_NOTES: Record<string, string> = {
+  Item: ' Its BOM links are removed and its parts are unlinked (the parts are kept).',
+  Part: ' Its site links are removed too.',
+  Site: ' Its part links are removed too.',
+};
+
 /**
  * Shared screen for Items, Parts and Sites: header, search + Add,
  * sortable table with hover actions, pagination, add/edit modal, delete confirmation.
@@ -39,6 +47,7 @@ export interface MasterDataConfig<T extends { id: number }, R> {
 export function MasterDataPage<T extends { id: number }, R>({ config }: { config: MasterDataConfig<T, R> }) {
   const { title, subtitle, entityName, queryKey, api, Form } = config;
   const queryClient = useQueryClient();
+  const toast = useToast();
   const { params, setParams } = useTableParams();
 
   const [editing, setEditing] = useState<T | 'new' | null>(null);
@@ -61,6 +70,7 @@ export function MasterDataPage<T extends { id: number }, R>({ config }: { config
     mutationFn: (row: T) => api.remove(row.id),
     onSuccess: async () => {
       setDeleting(null);
+      toast.success(`${entityName} deleted successfully`);
       await invalidate();
     },
   });
@@ -68,6 +78,7 @@ export function MasterDataPage<T extends { id: number }, R>({ config }: { config
   const submit = async (request: R) => {
     if (editing === 'new') await api.create(request);
     else if (editing) await api.update(editing.id, request);
+    toast.success(`${entityName} ${editing === 'new' ? 'added' : 'updated'} successfully`);
     setEditing(null);
     await invalidate();
   };
@@ -165,7 +176,7 @@ export function MasterDataPage<T extends { id: number }, R>({ config }: { config
         message={
           deleting
             ? `Delete ${entityName.toLowerCase()} "${config.label(deleting)}"? This cannot be undone.` +
-              (entityName === 'Item' ? ' Its BOM links are removed too.' : '')
+              (DELETE_NOTES[entityName] ?? '')
             : ''
         }
         busy={remove.isPending}

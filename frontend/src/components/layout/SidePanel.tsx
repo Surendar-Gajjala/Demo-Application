@@ -23,10 +23,11 @@ export function SidePanel({ collapsed, onToggle }: Props) {
         collapsed ? 'w-16' : 'w-72',
       )}
     >
-      <div className={clsx('px-4 pb-2 pt-5 text-[11px] font-semibold uppercase tracking-wider text-muted', collapsed && 'sr-only')}>
-        Home
+      <div className={clsx('flex h-14 items-center gap-2.5 border-b border-line px-4', collapsed && 'justify-center px-0')}>
+        <img src="/favicon.svg" alt="" className="h-7 w-7 shrink-0" />
+        {!collapsed && <span className="truncate text-[15px] font-semibold text-ink">Demo-Application</span>}
       </div>
-      <nav className="flex-1 space-y-1 px-2" aria-label="Main">
+      <nav className="flex-1 space-y-1 px-2 pt-3" aria-label="Main">
         {NAV.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}

@@ -71,6 +71,38 @@ class PartApiIT extends AbstractPostgresIT {
     }
 
     @Test
+    void optionalParentItemOnCreateAndUpdate() throws Exception {
+        String itemBody = mvc.perform(get("/api/items").param("search", "PROD-003"))
+                .andReturn().getResponse().getContentAsString();
+        long itemId = json.readTree(itemBody).get("content").get(0).get("id").asLong();
+        String number = "P-" + UUID.randomUUID().toString().substring(0, 8);
+        String withItem = """
+                {"partNumber":"%s","partName":"Bracket","lifeCyclePhase":"DESIGN","itemId":%d}
+                """.formatted(number, itemId);
+
+        String body = mvc.perform(post("/api/parts").contentType(MediaType.APPLICATION_JSON).content(withItem))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.itemId").value(itemId))
+                .andExpect(jsonPath("$.itemNumber").value("PROD-003"))
+                .andExpect(jsonPath("$.itemName").value("Product 003"))
+                .andReturn().getResponse().getContentAsString();
+        long id = json.readTree(body).get("id").asLong();
+
+        mvc.perform(get("/api/parts").param("search", number))
+                .andExpect(jsonPath("$.content[0].itemNumber").value("PROD-003"));
+
+        // Omitting itemId on a full update clears it.
+        mvc.perform(put("/api/parts/" + id).contentType(MediaType.APPLICATION_JSON)
+                        .content(partJson(number, "Bracket", "DESIGN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.itemId").doesNotExist());
+
+        mvc.perform(put("/api/parts/" + id).contentType(MediaType.APPLICATION_JSON)
+                        .content(withItem.replace(":" + itemId + "}", ":999999}")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void validationErrors() throws Exception {
         mvc.perform(post("/api/parts").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest())

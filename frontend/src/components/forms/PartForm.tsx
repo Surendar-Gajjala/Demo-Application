@@ -1,11 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { itemsApi } from '../../api/items';
 import { LIFE_CYCLE_PHASES, type PartRequest, type PartResponse } from '../../api/types';
 import { enumLabel } from '../../lib/format';
 import { Field, Select, TextArea, TextInput } from './FormField';
 import { FormActions } from './FormActions';
+import { RecordPicker, type PickerOption } from './RecordPicker';
 import { applyServerError, blankToNull } from './serverErrors';
 import type { EntityFormProps } from './types';
 
@@ -16,13 +18,21 @@ const schema = z.object({
   description: z.string().optional(),
   manufactureName: z.string().max(255, 'At most 255 characters').optional(),
   lifeCyclePhase: z.enum(['DESIGN', 'PRODUCTION']),
+  // Optional parent item (Item 1 : N Part).
+  itemId: z.number().int().positive().nullable(),
 });
+
+const loadItems = (search: string): Promise<PickerOption[]> =>
+  itemsApi
+    .list({ search, size: 20 })
+    .then((page) => page.content.map((i) => ({ id: i.id, code: i.itemNumber, name: i.itemName })));
 
 type Values = z.infer<typeof schema>;
 
 export function PartForm({ initial, onSubmit, onCancel }: EntityFormProps<PartResponse, PartRequest>) {
   const [formError, setFormError] = useState<string | null>(null);
   const {
+    control,
     register,
     handleSubmit,
     setError,
@@ -35,6 +45,7 @@ export function PartForm({ initial, onSubmit, onCancel }: EntityFormProps<PartRe
       description: initial?.description ?? '',
       manufactureName: initial?.manufactureName ?? '',
       lifeCyclePhase: initial?.lifeCyclePhase ?? 'DESIGN',
+      itemId: initial?.itemId ?? null,
     },
   });
 
@@ -47,6 +58,7 @@ export function PartForm({ initial, onSubmit, onCancel }: EntityFormProps<PartRe
         description: blankToNull(v.description),
         manufactureName: blankToNull(v.manufactureName),
         lifeCyclePhase: v.lifeCyclePhase,
+        itemId: v.itemId,
       });
     } catch (e) {
       setFormError(applyServerError(e, setError, 'partNumber'));
@@ -72,6 +84,26 @@ export function PartForm({ initial, onSubmit, onCancel }: EntityFormProps<PartRe
           />
         </Field>
       </div>
+      <Field label="Item" error={errors.itemId?.message}>
+        <Controller
+          control={control}
+          name="itemId"
+          render={({ field }) => (
+            <RecordPicker
+              queryKey={['items', 'picker']}
+              load={loadItems}
+              placeholder="Optional: search item number or name..."
+              emptyText="No items found"
+              initial={
+                initial?.itemId
+                  ? { id: initial.itemId, code: initial.itemNumber ?? '', name: initial.itemName }
+                  : null
+              }
+              onSelect={(item) => field.onChange(item ? item.id : null)}
+            />
+          )}
+        />
+      </Field>
       <Field label="Description" error={errors.description?.message}>
         <TextArea {...register('description')} />
       </Field>

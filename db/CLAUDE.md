@@ -11,6 +11,8 @@ db/
   migrations/
     V1__create_schema.sql    tables, constraints, indexes, triggers
     V2__seed_demo_data.sql   24 items, 24 BOM links, 25 parts, 8 sites
+    V3__part_item_and_part_site.sql  part.item_id (Item 1:N Part), part_site (Part N:N Site)
+    V4__seed_part_relationships.sql  20 parts assigned to items, 24 part-site links
   queries/
     bom_explosion.sql        recursive CTE, downward (psql vars root_id, max_depth)
     bom_where_used.sql       recursive CTE, upward   (psql vars item_id, max_depth)
@@ -31,7 +33,7 @@ docker compose down -v               # stop and DELETE all data (volume)
 Rules:
 
 -   **Never edit an applied migration.** Change the schema by adding
-    `V3__...sql`, `V4__...sql`, etc. Flyway rejects checksum changes.
+    `V5__...sql`, `V6__...sql`, etc. Flyway rejects checksum changes.
 -   Implementation details beyond the conceptual tables below:
     -   PKs are `BIGINT GENERATED ALWAYS AS IDENTITY`.
     -   Enums are `VARCHAR` + `CHECK`: `type` in (`ASSEMBLY`, `FINISHED`),
@@ -43,8 +45,15 @@ Rules:
         (constraint name `ck_item_bom_no_cycle`); BOM writes are serialized
         by a transaction-level advisory lock.
     -   `pg_trgm` GIN indexes on `lower(...)` of the search columns.
+    -   `part.item_id`: nullable FK to `item`, `ON DELETE SET NULL`
+        (deleting an item unlinks its parts), index `ix_part_item_id`.
+    -   `part_site`: FKs `ON DELETE CASCADE` to `part` and `site`,
+        `UNIQUE (part_id, site_id)` (`uq_part_site`), index on `site_id`.
+        No `updated_at`: a link is only created or deleted.
 -   Seed data: products (`PROD-*`) are `FINISHED`; every other item is
     `ASSEMBLY`. `ASSEMBLY-SHARED` and `ITEM-0005` have multiple parents.
+    PROD-001 owns A-2041, A-2042, A-2050 and A-2055. A-2046, A-2047,
+    A-2049, A-2053 and A-2063 have no item.
 
 ## 1. Overview
 
@@ -57,6 +66,7 @@ item
 item_bom
 part
 site
+part_site
 ```
 
 ------------------------------------------------------------------------
@@ -124,6 +134,7 @@ item_bom.to_node_id   → item.id
 part
 ------------------------------------------------
 id
+item_id
 part_number
 part_name
 description
@@ -135,6 +146,8 @@ updated_at
 
 -   `part_number` is the unique part identifier.
 -   `life_cycle_phase`: `DESIGN`, `PRODUCTION`
+-   `item_id` is the optional parent Item (Item 1 : N Part). A part
+    belongs to at most one item.
 
 ------------------------------------------------------------------------
 
@@ -151,6 +164,20 @@ address
 created_at
 updated_at
 ```
+
+### Part-Site Junction
+
+``` text
+part_site
+------------------------------------------------
+id
+part_id
+site_id
+created_at
+```
+
+One Part can be at many Sites and one Site can have many Parts. The
+link is the same row whichever side it is created from.
 
 ------------------------------------------------------------------------
 
@@ -176,6 +203,13 @@ This allows one Item to be:
 
 This design keeps **Item master data** separate from **BOM relationship
 data**.
+
+Parts and Sites are connected to Items and each other:
+
+``` text
+item.id ----< part.item_id           Item 1 : N Part
+part.id ----< part_site >---- site.id   Part N : N Site
+```
 
 ------------------------------------------------------------------------
 
